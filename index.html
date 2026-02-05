@@ -15,6 +15,10 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
     
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    
     <style>
         * {
             margin: 0;
@@ -41,7 +45,6 @@
             position: relative;
         }
 
-        /* Animated background */
         body::before {
             content: '';
             position: fixed;
@@ -404,22 +407,6 @@
             line-height: 1.6;
         }
 
-        @media (max-width: 480px) {
-            .logo {
-                font-size: 2rem;
-            }
-
-            .question-text {
-                font-size: 1.5rem;
-            }
-
-            .room-code {
-                font-size: 2rem;
-                letter-spacing: 4px;
-            }
-        }
-
-        /* Loading animation */
         .loading {
             text-align: center;
             padding: 40px;
@@ -438,15 +425,42 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        @media (max-width: 480px) {
+            .logo {
+                font-size: 2rem;
+            }
+
+            .question-text {
+                font-size: 1.5rem;
+            }
+
+            .room-code {
+                font-size: 2rem;
+                letter-spacing: 4px;
+            }
+        }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
-    <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+    <script>
+        // Initialize Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyA2tc4ysK6sLZ3JGy8M7uCmJjUfd9ZHF70",
+            authDomain: "shout-quiz.firebaseapp.com",
+            databaseURL: "https://shout-quiz-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "shout-quiz",
+            storageBucket: "shout-quiz.firebasestorage.app",
+            messagingSenderId: "154223452528",
+            appId: "1:154223452528:web:89f5fe45adcdc5a76befb5"
+        };
 
-        // Sample questions for MVP
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        // Sample questions
         const SAMPLE_QUESTIONS = [
             { question: "What is the capital of France?", answer: "Paris" },
             { question: "How many continents are there?", answer: "Seven" },
@@ -459,95 +473,158 @@
             { question: "In what year did World War 2 end?", answer: "1945" },
             { question: "What is the chemical symbol for gold?", answer: "AU" },
         ];
+    </script>
 
-        // Simulated multiplayer state (for MVP demo without backend)
-        class GameState {
-            constructor() {
-                this.rooms = new Map();
-                this.listeners = new Set();
-            }
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
 
+        // Firebase Game Manager
+        class FirebaseGameManager {
             createRoom(hostName) {
                 const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-                const room = {
+                const questions = [...SAMPLE_QUESTIONS].sort(() => Math.random() - 0.5).slice(0, 10);
+                
+                const roomData = {
                     code: roomCode,
                     host: hostName,
-                    players: [{ name: hostName, score: 0, isHost: true }],
-                    status: 'waiting', // waiting, playing, finished
+                    status: 'waiting',
                     currentQuestion: 0,
-                    questions: [...SAMPLE_QUESTIONS].sort(() => Math.random() - 0.5).slice(0, 10),
-                    startTime: null,
-                    lastAnsweredBy: null
+                    questions: questions,
+                    lastAnsweredBy: null,
+                    lastAnswerTime: null,
+                    players: {
+                        [this.sanitizeKey(hostName)]: {
+                            name: hostName,
+                            score: 0,
+                            isHost: true,
+                            joinedAt: Date.now()
+                        }
+                    }
                 };
-                this.rooms.set(roomCode, room);
-                this.notifyListeners();
-                return room;
+
+                return database.ref('rooms/' + roomCode).set(roomData).then(() => roomCode);
             }
 
             joinRoom(roomCode, playerName) {
-                const room = this.rooms.get(roomCode);
-                if (!room) return null;
-                if (room.players.length >= 5) return null;
-                if (room.status !== 'waiting') return null;
+                const roomRef = database.ref('rooms/' + roomCode);
                 
-                room.players.push({ name: playerName, score: 0, isHost: false });
-                this.notifyListeners();
-                return room;
-            }
+                return roomRef.once('value').then(snapshot => {
+                    if (!snapshot.exists()) {
+                        throw new Error('Room not found');
+                    }
 
-            getRoom(roomCode) {
-                return this.rooms.get(roomCode);
+                    const room = snapshot.val();
+                    
+                    if (room.status !== 'waiting') {
+                        throw new Error('Game already started');
+                    }
+
+                    const playerCount = Object.keys(room.players || {}).length;
+                    if (playerCount >= 5) {
+                        throw new Error('Room is full');
+                    }
+
+                    const playerKey = this.sanitizeKey(playerName);
+                    return roomRef.child('players/' + playerKey).set({
+                        name: playerName,
+                        score: 0,
+                        isHost: false,
+                        joinedAt: Date.now()
+                    }).then(() => roomCode);
+                });
             }
 
             startGame(roomCode) {
-                const room = this.rooms.get(roomCode);
-                if (room && room.status === 'waiting') {
-                    room.status = 'playing';
-                    room.startTime = Date.now();
-                    this.notifyListeners();
-                }
+                return database.ref('rooms/' + roomCode).update({
+                    status: 'playing',
+                    startTime: Date.now()
+                });
             }
 
             answerQuestion(roomCode, playerName, isCorrect) {
-                const room = this.rooms.get(roomCode);
-                if (!room || room.status !== 'playing') return;
+                if (!isCorrect) return Promise.resolve();
 
-                if (isCorrect) {
-                    const player = room.players.find(p => p.name === playerName);
-                    if (player) {
-                        player.score += 10;
-                        room.lastAnsweredBy = playerName;
+                const roomRef = database.ref('rooms/' + roomCode);
+                const playerKey = this.sanitizeKey(playerName);
+
+                return roomRef.once('value').then(snapshot => {
+                    const room = snapshot.val();
+                    
+                    // Check if someone already answered this question
+                    if (room.lastAnsweredBy && room.currentQuestion === (room.lastAnswerTime || 0)) {
+                        return;
                     }
 
-                    // Move to next question after 2 seconds
-                    setTimeout(() => {
-                        room.currentQuestion++;
-                        room.lastAnsweredBy = null;
-                        room.startTime = Date.now();
+                    const updates = {};
+                    updates['lastAnsweredBy'] = playerName;
+                    updates['lastAnswerTime'] = room.currentQuestion;
+                    updates[`players/${playerKey}/score`] = (room.players[playerKey].score || 0) + 10;
 
-                        if (room.currentQuestion >= room.questions.length) {
-                            room.status = 'finished';
-                            // Sort players by score
-                            room.players.sort((a, b) => b.score - a.score);
-                        }
-                        this.notifyListeners();
-                    }, 2000);
-                }
+                    return roomRef.update(updates).then(() => {
+                        // Move to next question after delay
+                        setTimeout(() => {
+                            roomRef.once('value').then(snap => {
+                                const currentRoom = snap.val();
+                                const nextQuestion = currentRoom.currentQuestion + 1;
 
-                this.notifyListeners();
+                                if (nextQuestion >= currentRoom.questions.length) {
+                                    roomRef.update({ status: 'finished' });
+                                } else {
+                                    roomRef.update({
+                                        currentQuestion: nextQuestion,
+                                        lastAnsweredBy: null,
+                                        startTime: Date.now()
+                                    });
+                                }
+                            });
+                        }, 2000);
+                    });
+                });
             }
 
-            subscribe(callback) {
-                this.listeners.add(callback);
-                return () => this.listeners.delete(callback);
+            timeoutQuestion(roomCode) {
+                const roomRef = database.ref('rooms/' + roomCode);
+                
+                return roomRef.once('value').then(snapshot => {
+                    const room = snapshot.val();
+                    
+                    // Only timeout if no one has answered
+                    if (room.lastAnsweredBy && room.currentQuestion === (room.lastAnswerTime || 0)) {
+                        return;
+                    }
+
+                    const nextQuestion = room.currentQuestion + 1;
+
+                    if (nextQuestion >= room.questions.length) {
+                        return roomRef.update({ status: 'finished' });
+                    } else {
+                        return roomRef.update({
+                            currentQuestion: nextQuestion,
+                            lastAnsweredBy: null,
+                            startTime: Date.now()
+                        });
+                    }
+                });
             }
 
-            notifyListeners() {
-                this.listeners.forEach(callback => callback());
+            subscribeToRoom(roomCode, callback) {
+                const roomRef = database.ref('rooms/' + roomCode);
+                roomRef.on('value', snapshot => {
+                    const room = snapshot.val();
+                    if (room) {
+                        callback(room);
+                    }
+                });
+
+                return () => roomRef.off('value');
+            }
+
+            sanitizeKey(key) {
+                return key.replace(/[.#$\[\]]/g, '_');
             }
         }
 
-        const gameState = new GameState();
+        const gameManager = new FirebaseGameManager();
 
         // Voice Recognition Hook
         function useVoiceRecognition(onResult, isListening) {
@@ -575,13 +652,10 @@
 
                 recognitionRef.current.onerror = (event) => {
                     if (event.error === 'no-speech') {
-                        // Restart recognition
                         if (isListening) {
                             try {
                                 recognitionRef.current.start();
-                            } catch (e) {
-                                // Already started
-                            }
+                            } catch (e) {}
                         }
                     }
                 };
@@ -590,9 +664,7 @@
                     if (isListening) {
                         try {
                             recognitionRef.current.start();
-                        } catch (e) {
-                            // Already started
-                        }
+                        } catch (e) {}
                     }
                 };
 
@@ -609,9 +681,7 @@
                 if (isListening) {
                     try {
                         recognitionRef.current.start();
-                    } catch (e) {
-                        // Already started
-                    }
+                    } catch (e) {}
                 } else {
                     recognitionRef.current.stop();
                 }
@@ -624,25 +694,37 @@
         function HomeScreen({ onCreateRoom, onJoinRoom }) {
             const [playerName, setPlayerName] = useState('');
             const [roomCode, setRoomCode] = useState('');
-            const [mode, setMode] = useState(null); // 'create' or 'join'
+            const [mode, setMode] = useState(null);
             const [error, setError] = useState('');
+            const [loading, setLoading] = useState(false);
 
-            const handleCreate = () => {
+            const handleCreate = async () => {
                 if (!playerName.trim()) {
                     setError('Please enter your name');
                     return;
                 }
-                onCreateRoom(playerName);
+                setLoading(true);
+                setError('');
+                try {
+                    await onCreateRoom(playerName);
+                } catch (err) {
+                    setError('Failed to create room. Please try again.');
+                    setLoading(false);
+                }
             };
 
-            const handleJoin = () => {
+            const handleJoin = async () => {
                 if (!playerName.trim() || !roomCode.trim()) {
                     setError('Please enter your name and room code');
                     return;
                 }
-                const success = onJoinRoom(roomCode.toUpperCase(), playerName);
-                if (!success) {
-                    setError('Room not found or full');
+                setLoading(true);
+                setError('');
+                try {
+                    await onJoinRoom(roomCode.toUpperCase(), playerName);
+                } catch (err) {
+                    setError(err.message || 'Failed to join room');
+                    setLoading(false);
                 }
             };
 
@@ -683,6 +765,7 @@
                                     setError('');
                                 }}
                                 maxLength={20}
+                                disabled={loading}
                             />
 
                             {mode === 'join' && (
@@ -697,26 +780,36 @@
                                     }}
                                     maxLength={6}
                                     style={{ textTransform: 'uppercase' }}
+                                    disabled={loading}
                                 />
                             )}
 
                             {error && <div className="error-message">{error}</div>}
 
-                            <button 
-                                className="btn" 
-                                onClick={mode === 'create' ? handleCreate : handleJoin}
-                            >
-                                {mode === 'create' ? 'Create Room' : 'Join Room'}
-                            </button>
-                            <button 
-                                className="btn btn-secondary" 
-                                onClick={() => {
-                                    setMode(null);
-                                    setError('');
-                                }}
-                            >
-                                Back
-                            </button>
+                            {loading ? (
+                                <div className="loading">
+                                    <div className="loading-spinner"></div>
+                                    <p>Connecting...</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <button 
+                                        className="btn" 
+                                        onClick={mode === 'create' ? handleCreate : handleJoin}
+                                    >
+                                        {mode === 'create' ? 'Create Room' : 'Join Room'}
+                                    </button>
+                                    <button 
+                                        className="btn btn-secondary" 
+                                        onClick={() => {
+                                            setMode(null);
+                                            setError('');
+                                        }}
+                                    >
+                                        Back
+                                    </button>
+                                </>
+                            )}
                         </div>
                     )}
                 </div>
@@ -726,13 +819,14 @@
         // Lobby Screen
         function LobbyScreen({ room, playerName }) {
             const isHost = room.host === playerName;
+            const playersList = Object.values(room.players || {});
 
             const handleStart = () => {
-                if (room.players.length < 2) {
+                if (playersList.length < 2) {
                     alert('Need at least 2 players to start');
                     return;
                 }
-                gameState.startGame(room.code);
+                gameManager.startGame(room.code);
             };
 
             return (
@@ -749,17 +843,19 @@
 
                     <div className="card">
                         <h3 style={{ marginBottom: '20px' }}>
-                            Players ({room.players.length}/5)
+                            Players ({playersList.length}/5)
                         </h3>
                         <ul className="player-list">
-                            {room.players.map((player, idx) => (
-                                <li key={idx} className={`player-item ${player.isHost ? 'is-host' : ''}`}>
-                                    <span className="player-name">
-                                        {player.name} {player.isHost && '👑'}
-                                    </span>
-                                    <span style={{ color: 'var(--neon-cyan)' }}>Ready</span>
-                                </li>
-                            ))}
+                            {playersList
+                                .sort((a, b) => a.joinedAt - b.joinedAt)
+                                .map((player, idx) => (
+                                    <li key={idx} className={`player-item ${player.isHost ? 'is-host' : ''}`}>
+                                        <span className="player-name">
+                                            {player.name} {player.isHost && '👑'}
+                                        </span>
+                                        <span style={{ color: 'var(--neon-cyan)' }}>Ready</span>
+                                    </li>
+                                ))}
                         </ul>
 
                         {isHost && (
@@ -768,7 +864,7 @@
                                     Start Game
                                 </button>
                                 <div className="info-text" style={{ marginTop: '15px' }}>
-                                    {room.players.length < 2 
+                                    {playersList.length < 2 
                                         ? 'Waiting for more players...' 
                                         : 'Ready to start! Click above.'}
                                 </div>
@@ -790,10 +886,11 @@
             const [timeLeft, setTimeLeft] = useState(5);
             const [isListening, setIsListening] = useState(false);
             const [micPermission, setMicPermission] = useState(null);
+            const timerRef = useRef(null);
             const currentQ = room.questions[room.currentQuestion];
+            const isAnswered = room.lastAnsweredBy && room.lastAnswerTime === room.currentQuestion;
 
             useEffect(() => {
-                // Request microphone permission
                 navigator.mediaDevices.getUserMedia({ audio: true })
                     .then(() => {
                         setMicPermission(true);
@@ -805,31 +902,37 @@
             }, []);
 
             useEffect(() => {
-                if (room.lastAnsweredBy) {
+                if (isAnswered) {
                     setTimeLeft(5);
+                    if (timerRef.current) {
+                        clearInterval(timerRef.current);
+                    }
                     return;
                 }
 
                 setTimeLeft(5);
-                const startTime = Date.now();
-                const timer = setInterval(() => {
+                const startTime = room.startTime || Date.now();
+                
+                timerRef.current = setInterval(() => {
                     const elapsed = Math.floor((Date.now() - startTime) / 1000);
                     const remaining = Math.max(0, 5 - elapsed);
                     setTimeLeft(remaining);
 
                     if (remaining === 0) {
-                        clearInterval(timer);
-                        setTimeout(() => {
-                            gameState.answerQuestion(room.code, playerName, false);
-                        }, 1000);
+                        clearInterval(timerRef.current);
+                        gameManager.timeoutQuestion(room.code);
                     }
                 }, 100);
 
-                return () => clearInterval(timer);
-            }, [room.currentQuestion, room.lastAnsweredBy]);
+                return () => {
+                    if (timerRef.current) {
+                        clearInterval(timerRef.current);
+                    }
+                };
+            }, [room.currentQuestion, room.startTime, isAnswered]);
 
             const handleVoiceResult = (transcript) => {
-                if (room.lastAnsweredBy) return; // Already answered
+                if (isAnswered) return;
 
                 const answer = currentQ.answer.toLowerCase();
                 const isCorrect = transcript.includes(answer) || 
@@ -837,11 +940,11 @@
                                  levenshteinDistance(transcript, answer) <= 2;
 
                 if (isCorrect) {
-                    gameState.answerQuestion(room.code, playerName, true);
+                    gameManager.answerQuestion(room.code, playerName, true);
                 }
             };
 
-            const hasVoiceRecognition = useVoiceRecognition(handleVoiceResult, isListening && !room.lastAnsweredBy);
+            const hasVoiceRecognition = useVoiceRecognition(handleVoiceResult, isListening && !isAnswered);
 
             if (!hasVoiceRecognition) {
                 return (
@@ -879,6 +982,8 @@
                 );
             }
 
+            const playersList = Object.values(room.players || {});
+
             return (
                 <div className="container">
                     <div className="card">
@@ -889,7 +994,7 @@
                         <div className="question-container">
                             <div className="question-text">{currentQ.question}</div>
 
-                            {!room.lastAnsweredBy ? (
+                            {!isAnswered ? (
                                 <>
                                     <div className="timer">
                                         <div className="timer-circle">
@@ -924,7 +1029,7 @@
                     <div className="card">
                         <h3 style={{ marginBottom: '15px' }}>Scores</h3>
                         <ul className="player-list">
-                            {[...room.players]
+                            {playersList
                                 .sort((a, b) => b.score - a.score)
                                 .map((player, idx) => (
                                     <li key={idx} className="player-item">
@@ -940,7 +1045,8 @@
 
         // Results Screen
         function ResultsScreen({ room }) {
-            const top3 = room.players.slice(0, 3);
+            const playersList = Object.values(room.players || {}).sort((a, b) => b.score - a.score);
+            const top3 = playersList.slice(0, 3);
 
             return (
                 <div className="container">
@@ -974,11 +1080,11 @@
                                 </div>
                             )}
 
-                            {room.players.length > 3 && (
+                            {playersList.length > 3 && (
                                 <>
                                     <h3 style={{ marginTop: '40px', marginBottom: '20px' }}>Other Players</h3>
                                     <ul className="player-list">
-                                        {room.players.slice(3).map((player, idx) => (
+                                        {playersList.slice(3).map((player, idx) => (
                                             <li key={idx} className="player-item">
                                                 <span className="player-name">{player.name}</span>
                                                 <span className="player-score">{player.score}</span>
@@ -1005,31 +1111,34 @@
         function App() {
             const [currentRoom, setCurrentRoom] = useState(null);
             const [playerName, setPlayerName] = useState('');
-            const [, forceUpdate] = useState();
+            const [room, setRoom] = useState(null);
+            const unsubscribeRef = useRef(null);
 
             useEffect(() => {
-                return gameState.subscribe(() => {
-                    forceUpdate({});
-                });
-            }, []);
+                if (currentRoom) {
+                    unsubscribeRef.current = gameManager.subscribeToRoom(currentRoom, (roomData) => {
+                        setRoom(roomData);
+                    });
 
-            const handleCreateRoom = (name) => {
-                const room = gameState.createRoom(name);
-                setCurrentRoom(room.code);
+                    return () => {
+                        if (unsubscribeRef.current) {
+                            unsubscribeRef.current();
+                        }
+                    };
+                }
+            }, [currentRoom]);
+
+            const handleCreateRoom = async (name) => {
+                const code = await gameManager.createRoom(name);
+                setCurrentRoom(code);
                 setPlayerName(name);
             };
 
-            const handleJoinRoom = (code, name) => {
-                const room = gameState.joinRoom(code, name);
-                if (room) {
-                    setCurrentRoom(code);
-                    setPlayerName(name);
-                    return true;
-                }
-                return false;
+            const handleJoinRoom = async (code, name) => {
+                await gameManager.joinRoom(code, name);
+                setCurrentRoom(code);
+                setPlayerName(name);
             };
-
-            const room = currentRoom ? gameState.getRoom(currentRoom) : null;
 
             if (!room) {
                 return <HomeScreen onCreateRoom={handleCreateRoom} onJoinRoom={handleJoinRoom} />;
@@ -1050,7 +1159,6 @@
             return null;
         }
 
-        // Simple Levenshtein distance for fuzzy matching
         function levenshteinDistance(str1, str2) {
             const track = Array(str2.length + 1).fill(null).map(() =>
                 Array(str1.length + 1).fill(null));
