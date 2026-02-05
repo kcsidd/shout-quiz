@@ -1,0 +1,1080 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Shout Quiz - Voice Party Game</title>
+    <meta name="description" content="Real-time multiplayer quiz game with voice recognition">
+    <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiU2hvdXQgUXVpeiIsInNob3J0X25hbWUiOiJTaG91dFF1aXoiLCJzdGFydF91cmwiOiIvIiwiZGlzcGxheSI6InN0YW5kYWxvbmUiLCJiYWNrZ3JvdW5kX2NvbG9yIjoiIzBhMGEwYSIsInRoZW1lX2NvbG9yIjoiI2ZmNjYwMCIsImljb25zIjpbeyJzcmMiOiJkYXRhOmltYWdlL3N2Zyt4bWwsJTNDc3ZnIHhtbG5zPSdodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2Zycgdmlld0JveD0nMCAwIDEwMCAxMDAnJTNFJTNDcmVjdCBmaWxsPSclMjNmZjY2MDAnIHdpZHRoPScxMDAnIGhlaWdodD0nMTAwJy8lM0UlM0N0ZXh0IHg9JzUwJyB5PSc3MCcgZm9udC1zaXplPSc2MCcgdGV4dC1hbmNob3I9J21pZGRsZScgZmlsbD0nd2hpdGUnJTNF8J+UtjwvdGV4dCUzRSUzQy9zdmclM0UiLCJzaXplcyI6IjE5MngxOTIiLCJ0eXBlIjoiaW1hZ2Uvc3ZnK3htbCJ9XX0=">
+    <meta name="theme-color" content="#ff6600">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --neon-orange: #ff6600;
+            --neon-pink: #ff0066;
+            --neon-cyan: #00ffff;
+            --dark-bg: #0a0a0a;
+            --card-bg: #1a1a1a;
+            --text-primary: #ffffff;
+            --text-secondary: #cccccc;
+        }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--dark-bg);
+            color: var(--text-primary);
+            overflow-x: hidden;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* Animated background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: 
+                radial-gradient(circle at 20% 50%, rgba(255, 102, 0, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(255, 0, 102, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 40% 20%, rgba(0, 255, 255, 0.1) 0%, transparent 50%);
+            animation: backgroundShift 20s ease-in-out infinite;
+            z-index: 0;
+        }
+
+        @keyframes backgroundShift {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(20px, -20px) scale(1.1); }
+        }
+
+        #root {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            width: 100%;
+        }
+
+        .logo {
+            font-family: 'Archivo Black', sans-serif;
+            font-size: 3rem;
+            text-align: center;
+            margin: 30px 0;
+            background: linear-gradient(135deg, var(--neon-orange) 0%, var(--neon-pink) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 30px rgba(255, 102, 0, 0.3);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.9; transform: scale(1.02); }
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 20px;
+            padding: 30px;
+            margin: 20px 0;
+            border: 2px solid rgba(255, 102, 0, 0.2);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            backdrop-filter: blur(10px);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, var(--neon-orange) 0%, var(--neon-pink) 100%);
+            color: white;
+            border: none;
+            padding: 18px 40px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            border-radius: 50px;
+            cursor: pointer;
+            width: 100%;
+            margin: 10px 0;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 20px rgba(255, 102, 0, 0.4);
+            font-family: 'DM Sans', sans-serif;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(255, 102, 0, 0.6);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: transparent;
+            border: 2px solid var(--neon-orange);
+            box-shadow: none;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 102, 0, 0.1);
+        }
+
+        .input {
+            width: 100%;
+            padding: 18px;
+            font-size: 1.1rem;
+            border: 2px solid rgba(255, 102, 0, 0.3);
+            background: rgba(255, 255, 255, 0.05);
+            color: white;
+            border-radius: 15px;
+            margin: 10px 0;
+            transition: all 0.3s ease;
+            font-family: 'DM Sans', sans-serif;
+        }
+
+        .input:focus {
+            outline: none;
+            border-color: var(--neon-orange);
+            box-shadow: 0 0 20px rgba(255, 102, 0, 0.3);
+        }
+
+        .input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .room-code {
+            font-family: 'Archivo Black', sans-serif;
+            font-size: 3rem;
+            text-align: center;
+            letter-spacing: 8px;
+            color: var(--neon-orange);
+            text-shadow: 0 0 20px rgba(255, 102, 0, 0.5);
+            margin: 20px 0;
+        }
+
+        .player-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .player-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 15px 20px;
+            margin: 8px 0;
+            border-radius: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .player-item.is-host {
+            border-color: var(--neon-orange);
+            background: rgba(255, 102, 0, 0.1);
+        }
+
+        .player-name {
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+
+        .player-score {
+            font-family: 'Archivo Black', sans-serif;
+            font-size: 1.5rem;
+            color: var(--neon-cyan);
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        }
+
+        .question-container {
+            text-align: center;
+            padding: 40px 20px;
+        }
+
+        .question-number {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+        }
+
+        .question-text {
+            font-family: 'Archivo Black', sans-serif;
+            font-size: 2rem;
+            line-height: 1.3;
+            margin: 20px 0 40px 0;
+            color: var(--text-primary);
+        }
+
+        .timer {
+            width: 120px;
+            height: 120px;
+            margin: 30px auto;
+            position: relative;
+        }
+
+        .timer-circle {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            border: 6px solid rgba(255, 102, 0, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Archivo Black', sans-serif;
+            font-size: 3rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .timer-fill {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: linear-gradient(180deg, var(--neon-orange) 0%, var(--neon-pink) 100%);
+            transition: height 1s linear;
+            z-index: -1;
+        }
+
+        .timer-number {
+            position: relative;
+            z-index: 1;
+        }
+
+        .mic-indicator {
+            text-align: center;
+            margin: 30px 0;
+        }
+
+        .mic-icon {
+            font-size: 4rem;
+            animation: micPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes micPulse {
+            0%, 100% { transform: scale(1); opacity: 0.7; }
+            50% { transform: scale(1.1); opacity: 1; }
+        }
+
+        .mic-status {
+            margin-top: 15px;
+            font-size: 1rem;
+            color: var(--text-secondary);
+        }
+
+        .listening-active {
+            color: var(--neon-cyan);
+            animation: glow 1s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { text-shadow: 0 0 10px rgba(0, 255, 255, 0.5); }
+            50% { text-shadow: 0 0 20px rgba(0, 255, 255, 0.8); }
+        }
+
+        .correct-answer {
+            background: rgba(0, 255, 136, 0.1);
+            border: 2px solid #00ff88;
+            padding: 20px;
+            border-radius: 15px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .correct-answer-text {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #00ff88;
+            text-shadow: 0 0 15px rgba(0, 255, 136, 0.5);
+        }
+
+        .winner-name {
+            font-size: 1rem;
+            margin-top: 10px;
+            color: var(--text-secondary);
+        }
+
+        .final-scores {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .final-scores h2 {
+            font-family: 'Archivo Black', sans-serif;
+            font-size: 2.5rem;
+            margin-bottom: 30px;
+            background: linear-gradient(135deg, var(--neon-orange) 0%, var(--neon-pink) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .podium {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            margin: 40px 0;
+            gap: 15px;
+        }
+
+        .podium-place {
+            flex: 1;
+            text-align: center;
+            padding: 20px 10px;
+            border-radius: 15px;
+            position: relative;
+        }
+
+        .podium-place.first {
+            background: linear-gradient(135deg, #ffd700 0%, #ffed4e 100%);
+            order: 2;
+            height: 200px;
+            box-shadow: 0 0 30px rgba(255, 215, 0, 0.4);
+        }
+
+        .podium-place.second {
+            background: linear-gradient(135deg, #c0c0c0 0%, #e8e8e8 100%);
+            order: 1;
+            height: 150px;
+        }
+
+        .podium-place.third {
+            background: linear-gradient(135deg, #cd7f32 0%, #e8a87c 100%);
+            order: 3;
+            height: 120px;
+        }
+
+        .podium-rank {
+            font-size: 2rem;
+            margin-bottom: 10px;
+        }
+
+        .podium-name {
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: #000;
+            margin: 10px 0;
+        }
+
+        .podium-score {
+            font-family: 'Archivo Black', sans-serif;
+            font-size: 1.5rem;
+            color: #000;
+        }
+
+        .error-message {
+            background: rgba(255, 0, 102, 0.1);
+            border: 2px solid var(--neon-pink);
+            padding: 15px;
+            border-radius: 15px;
+            margin: 15px 0;
+            text-align: center;
+            color: var(--neon-pink);
+        }
+
+        .info-text {
+            text-align: center;
+            color: var(--text-secondary);
+            margin: 20px 0;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 480px) {
+            .logo {
+                font-size: 2rem;
+            }
+
+            .question-text {
+                font-size: 1.5rem;
+            }
+
+            .room-code {
+                font-size: 2rem;
+                letter-spacing: 4px;
+            }
+        }
+
+        /* Loading animation */
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 102, 0, 0.2);
+            border-top-color: var(--neon-orange);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Sample questions for MVP
+        const SAMPLE_QUESTIONS = [
+            { question: "What is the capital of France?", answer: "Paris" },
+            { question: "How many continents are there?", answer: "Seven" },
+            { question: "What color are emeralds?", answer: "Green" },
+            { question: "Who painted the Mona Lisa?", answer: "Leonardo da Vinci" },
+            { question: "What is 12 times 12?", answer: "144" },
+            { question: "What planet is known as the Red Planet?", answer: "Mars" },
+            { question: "How many sides does a hexagon have?", answer: "Six" },
+            { question: "What is the largest ocean on Earth?", answer: "Pacific" },
+            { question: "In what year did World War 2 end?", answer: "1945" },
+            { question: "What is the chemical symbol for gold?", answer: "AU" },
+        ];
+
+        // Simulated multiplayer state (for MVP demo without backend)
+        class GameState {
+            constructor() {
+                this.rooms = new Map();
+                this.listeners = new Set();
+            }
+
+            createRoom(hostName) {
+                const roomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+                const room = {
+                    code: roomCode,
+                    host: hostName,
+                    players: [{ name: hostName, score: 0, isHost: true }],
+                    status: 'waiting', // waiting, playing, finished
+                    currentQuestion: 0,
+                    questions: [...SAMPLE_QUESTIONS].sort(() => Math.random() - 0.5).slice(0, 10),
+                    startTime: null,
+                    lastAnsweredBy: null
+                };
+                this.rooms.set(roomCode, room);
+                this.notifyListeners();
+                return room;
+            }
+
+            joinRoom(roomCode, playerName) {
+                const room = this.rooms.get(roomCode);
+                if (!room) return null;
+                if (room.players.length >= 5) return null;
+                if (room.status !== 'waiting') return null;
+                
+                room.players.push({ name: playerName, score: 0, isHost: false });
+                this.notifyListeners();
+                return room;
+            }
+
+            getRoom(roomCode) {
+                return this.rooms.get(roomCode);
+            }
+
+            startGame(roomCode) {
+                const room = this.rooms.get(roomCode);
+                if (room && room.status === 'waiting') {
+                    room.status = 'playing';
+                    room.startTime = Date.now();
+                    this.notifyListeners();
+                }
+            }
+
+            answerQuestion(roomCode, playerName, isCorrect) {
+                const room = this.rooms.get(roomCode);
+                if (!room || room.status !== 'playing') return;
+
+                if (isCorrect) {
+                    const player = room.players.find(p => p.name === playerName);
+                    if (player) {
+                        player.score += 10;
+                        room.lastAnsweredBy = playerName;
+                    }
+
+                    // Move to next question after 2 seconds
+                    setTimeout(() => {
+                        room.currentQuestion++;
+                        room.lastAnsweredBy = null;
+                        room.startTime = Date.now();
+
+                        if (room.currentQuestion >= room.questions.length) {
+                            room.status = 'finished';
+                            // Sort players by score
+                            room.players.sort((a, b) => b.score - a.score);
+                        }
+                        this.notifyListeners();
+                    }, 2000);
+                }
+
+                this.notifyListeners();
+            }
+
+            subscribe(callback) {
+                this.listeners.add(callback);
+                return () => this.listeners.delete(callback);
+            }
+
+            notifyListeners() {
+                this.listeners.forEach(callback => callback());
+            }
+        }
+
+        const gameState = new GameState();
+
+        // Voice Recognition Hook
+        function useVoiceRecognition(onResult, isListening) {
+            const recognitionRef = useRef(null);
+
+            useEffect(() => {
+                if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                    return;
+                }
+
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognitionRef.current = new SpeechRecognition();
+                recognitionRef.current.continuous = true;
+                recognitionRef.current.interimResults = true;
+                recognitionRef.current.lang = 'en-US';
+
+                recognitionRef.current.onresult = (event) => {
+                    const last = event.results.length - 1;
+                    const transcript = event.results[last][0].transcript.trim().toLowerCase();
+                    
+                    if (event.results[last].isFinal && transcript) {
+                        onResult(transcript);
+                    }
+                };
+
+                recognitionRef.current.onerror = (event) => {
+                    if (event.error === 'no-speech') {
+                        // Restart recognition
+                        if (isListening) {
+                            try {
+                                recognitionRef.current.start();
+                            } catch (e) {
+                                // Already started
+                            }
+                        }
+                    }
+                };
+
+                recognitionRef.current.onend = () => {
+                    if (isListening) {
+                        try {
+                            recognitionRef.current.start();
+                        } catch (e) {
+                            // Already started
+                        }
+                    }
+                };
+
+                return () => {
+                    if (recognitionRef.current) {
+                        recognitionRef.current.stop();
+                    }
+                };
+            }, []);
+
+            useEffect(() => {
+                if (!recognitionRef.current) return;
+
+                if (isListening) {
+                    try {
+                        recognitionRef.current.start();
+                    } catch (e) {
+                        // Already started
+                    }
+                } else {
+                    recognitionRef.current.stop();
+                }
+            }, [isListening]);
+
+            return recognitionRef.current !== null;
+        }
+
+        // Home Screen
+        function HomeScreen({ onCreateRoom, onJoinRoom }) {
+            const [playerName, setPlayerName] = useState('');
+            const [roomCode, setRoomCode] = useState('');
+            const [mode, setMode] = useState(null); // 'create' or 'join'
+            const [error, setError] = useState('');
+
+            const handleCreate = () => {
+                if (!playerName.trim()) {
+                    setError('Please enter your name');
+                    return;
+                }
+                onCreateRoom(playerName);
+            };
+
+            const handleJoin = () => {
+                if (!playerName.trim() || !roomCode.trim()) {
+                    setError('Please enter your name and room code');
+                    return;
+                }
+                const success = onJoinRoom(roomCode.toUpperCase(), playerName);
+                if (!success) {
+                    setError('Room not found or full');
+                }
+            };
+
+            return (
+                <div className="container">
+                    <div className="logo">🎤 SHOUT QUIZ</div>
+                    
+                    {!mode ? (
+                        <div className="card">
+                            <h2 style={{ textAlign: 'center', marginBottom: '30px', fontSize: '1.5rem' }}>
+                                Voice-Activated Quiz Party
+                            </h2>
+                            <button className="btn" onClick={() => setMode('create')}>
+                                Create New Game
+                            </button>
+                            <button className="btn btn-secondary" onClick={() => setMode('join')}>
+                                Join Game
+                            </button>
+                            <div className="info-text" style={{ marginTop: '30px' }}>
+                                🎮 2-5 players compete<br/>
+                                🎤 Shout your answers<br/>
+                                ⚡ First correct answer wins
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="card">
+                            <h2 style={{ textAlign: 'center', marginBottom: '20px', fontSize: '1.5rem' }}>
+                                {mode === 'create' ? 'Create Game' : 'Join Game'}
+                            </h2>
+                            
+                            <input
+                                type="text"
+                                className="input"
+                                placeholder="Your Name"
+                                value={playerName}
+                                onChange={(e) => {
+                                    setPlayerName(e.target.value);
+                                    setError('');
+                                }}
+                                maxLength={20}
+                            />
+
+                            {mode === 'join' && (
+                                <input
+                                    type="text"
+                                    className="input"
+                                    placeholder="Room Code"
+                                    value={roomCode}
+                                    onChange={(e) => {
+                                        setRoomCode(e.target.value.toUpperCase());
+                                        setError('');
+                                    }}
+                                    maxLength={6}
+                                    style={{ textTransform: 'uppercase' }}
+                                />
+                            )}
+
+                            {error && <div className="error-message">{error}</div>}
+
+                            <button 
+                                className="btn" 
+                                onClick={mode === 'create' ? handleCreate : handleJoin}
+                            >
+                                {mode === 'create' ? 'Create Room' : 'Join Room'}
+                            </button>
+                            <button 
+                                className="btn btn-secondary" 
+                                onClick={() => {
+                                    setMode(null);
+                                    setError('');
+                                }}
+                            >
+                                Back
+                            </button>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        // Lobby Screen
+        function LobbyScreen({ room, playerName }) {
+            const isHost = room.host === playerName;
+
+            const handleStart = () => {
+                if (room.players.length < 2) {
+                    alert('Need at least 2 players to start');
+                    return;
+                }
+                gameState.startGame(room.code);
+            };
+
+            return (
+                <div className="container">
+                    <div className="logo">🎤 SHOUT QUIZ</div>
+                    
+                    <div className="card">
+                        <h2 style={{ textAlign: 'center', marginBottom: '10px' }}>Room Code</h2>
+                        <div className="room-code">{room.code}</div>
+                        <div className="info-text">
+                            Share this code with friends to join!
+                        </div>
+                    </div>
+
+                    <div className="card">
+                        <h3 style={{ marginBottom: '20px' }}>
+                            Players ({room.players.length}/5)
+                        </h3>
+                        <ul className="player-list">
+                            {room.players.map((player, idx) => (
+                                <li key={idx} className={`player-item ${player.isHost ? 'is-host' : ''}`}>
+                                    <span className="player-name">
+                                        {player.name} {player.isHost && '👑'}
+                                    </span>
+                                    <span style={{ color: 'var(--neon-cyan)' }}>Ready</span>
+                                </li>
+                            ))}
+                        </ul>
+
+                        {isHost && (
+                            <>
+                                <button className="btn" onClick={handleStart} style={{ marginTop: '20px' }}>
+                                    Start Game
+                                </button>
+                                <div className="info-text" style={{ marginTop: '15px' }}>
+                                    {room.players.length < 2 
+                                        ? 'Waiting for more players...' 
+                                        : 'Ready to start! Click above.'}
+                                </div>
+                            </>
+                        )}
+
+                        {!isHost && (
+                            <div className="info-text" style={{ marginTop: '20px' }}>
+                                Waiting for host to start the game...
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        // Game Screen
+        function GameScreen({ room, playerName }) {
+            const [timeLeft, setTimeLeft] = useState(5);
+            const [isListening, setIsListening] = useState(false);
+            const [micPermission, setMicPermission] = useState(null);
+            const currentQ = room.questions[room.currentQuestion];
+
+            useEffect(() => {
+                // Request microphone permission
+                navigator.mediaDevices.getUserMedia({ audio: true })
+                    .then(() => {
+                        setMicPermission(true);
+                        setIsListening(true);
+                    })
+                    .catch(() => {
+                        setMicPermission(false);
+                    });
+            }, []);
+
+            useEffect(() => {
+                if (room.lastAnsweredBy) {
+                    setTimeLeft(5);
+                    return;
+                }
+
+                setTimeLeft(5);
+                const startTime = Date.now();
+                const timer = setInterval(() => {
+                    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                    const remaining = Math.max(0, 5 - elapsed);
+                    setTimeLeft(remaining);
+
+                    if (remaining === 0) {
+                        clearInterval(timer);
+                        setTimeout(() => {
+                            gameState.answerQuestion(room.code, playerName, false);
+                        }, 1000);
+                    }
+                }, 100);
+
+                return () => clearInterval(timer);
+            }, [room.currentQuestion, room.lastAnsweredBy]);
+
+            const handleVoiceResult = (transcript) => {
+                if (room.lastAnsweredBy) return; // Already answered
+
+                const answer = currentQ.answer.toLowerCase();
+                const isCorrect = transcript.includes(answer) || 
+                                 answer.includes(transcript) ||
+                                 levenshteinDistance(transcript, answer) <= 2;
+
+                if (isCorrect) {
+                    gameState.answerQuestion(room.code, playerName, true);
+                }
+            };
+
+            const hasVoiceRecognition = useVoiceRecognition(handleVoiceResult, isListening && !room.lastAnsweredBy);
+
+            if (!hasVoiceRecognition) {
+                return (
+                    <div className="container">
+                        <div className="card">
+                            <div className="error-message">
+                                Voice recognition is not supported on this browser. 
+                                Please use Chrome, Safari, or Edge on a mobile device or desktop.
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (micPermission === false) {
+                return (
+                    <div className="container">
+                        <div className="card">
+                            <div className="error-message">
+                                Microphone permission denied. Please enable microphone access and refresh the page.
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            if (micPermission === null) {
+                return (
+                    <div className="container">
+                        <div className="loading">
+                            <div className="loading-spinner"></div>
+                            <p>Requesting microphone access...</p>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="container">
+                    <div className="card">
+                        <div className="question-number">
+                            Question {room.currentQuestion + 1} / {room.questions.length}
+                        </div>
+                        
+                        <div className="question-container">
+                            <div className="question-text">{currentQ.question}</div>
+
+                            {!room.lastAnsweredBy ? (
+                                <>
+                                    <div className="timer">
+                                        <div className="timer-circle">
+                                            <div 
+                                                className="timer-fill" 
+                                                style={{ height: `${(timeLeft / 5) * 100}%` }}
+                                            ></div>
+                                            <span className="timer-number">{timeLeft}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="mic-indicator">
+                                        <div className="mic-icon">🎤</div>
+                                        <div className="mic-status listening-active">
+                                            Listening... Shout your answer!
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="correct-answer">
+                                    <div className="correct-answer-text">
+                                        ✓ {currentQ.answer}
+                                    </div>
+                                    <div className="winner-name">
+                                        {room.lastAnsweredBy} got it! 🎉
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="card">
+                        <h3 style={{ marginBottom: '15px' }}>Scores</h3>
+                        <ul className="player-list">
+                            {[...room.players]
+                                .sort((a, b) => b.score - a.score)
+                                .map((player, idx) => (
+                                    <li key={idx} className="player-item">
+                                        <span className="player-name">{player.name}</span>
+                                        <span className="player-score">{player.score}</span>
+                                    </li>
+                                ))}
+                        </ul>
+                    </div>
+                </div>
+            );
+        }
+
+        // Results Screen
+        function ResultsScreen({ room }) {
+            const top3 = room.players.slice(0, 3);
+
+            return (
+                <div className="container">
+                    <div className="card">
+                        <div className="final-scores">
+                            <h2>🏆 Game Over!</h2>
+
+                            {top3.length >= 1 && (
+                                <div className="podium">
+                                    {top3[1] && (
+                                        <div className="podium-place second">
+                                            <div className="podium-rank">🥈</div>
+                                            <div className="podium-name">{top3[1].name}</div>
+                                            <div className="podium-score">{top3[1].score}</div>
+                                        </div>
+                                    )}
+                                    
+                                    <div className="podium-place first">
+                                        <div className="podium-rank">🥇</div>
+                                        <div className="podium-name">{top3[0].name}</div>
+                                        <div className="podium-score">{top3[0].score}</div>
+                                    </div>
+
+                                    {top3[2] && (
+                                        <div className="podium-place third">
+                                            <div className="podium-rank">🥉</div>
+                                            <div className="podium-name">{top3[2].name}</div>
+                                            <div className="podium-score">{top3[2].score}</div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {room.players.length > 3 && (
+                                <>
+                                    <h3 style={{ marginTop: '40px', marginBottom: '20px' }}>Other Players</h3>
+                                    <ul className="player-list">
+                                        {room.players.slice(3).map((player, idx) => (
+                                            <li key={idx} className="player-item">
+                                                <span className="player-name">{player.name}</span>
+                                                <span className="player-score">{player.score}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </>
+                            )}
+
+                            <button 
+                                className="btn" 
+                                onClick={() => window.location.reload()}
+                                style={{ marginTop: '40px' }}
+                            >
+                                Play Again
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Main App
+        function App() {
+            const [currentRoom, setCurrentRoom] = useState(null);
+            const [playerName, setPlayerName] = useState('');
+            const [, forceUpdate] = useState();
+
+            useEffect(() => {
+                return gameState.subscribe(() => {
+                    forceUpdate({});
+                });
+            }, []);
+
+            const handleCreateRoom = (name) => {
+                const room = gameState.createRoom(name);
+                setCurrentRoom(room.code);
+                setPlayerName(name);
+            };
+
+            const handleJoinRoom = (code, name) => {
+                const room = gameState.joinRoom(code, name);
+                if (room) {
+                    setCurrentRoom(code);
+                    setPlayerName(name);
+                    return true;
+                }
+                return false;
+            };
+
+            const room = currentRoom ? gameState.getRoom(currentRoom) : null;
+
+            if (!room) {
+                return <HomeScreen onCreateRoom={handleCreateRoom} onJoinRoom={handleJoinRoom} />;
+            }
+
+            if (room.status === 'waiting') {
+                return <LobbyScreen room={room} playerName={playerName} />;
+            }
+
+            if (room.status === 'playing') {
+                return <GameScreen room={room} playerName={playerName} />;
+            }
+
+            if (room.status === 'finished') {
+                return <ResultsScreen room={room} />;
+            }
+
+            return null;
+        }
+
+        // Simple Levenshtein distance for fuzzy matching
+        function levenshteinDistance(str1, str2) {
+            const track = Array(str2.length + 1).fill(null).map(() =>
+                Array(str1.length + 1).fill(null));
+            
+            for (let i = 0; i <= str1.length; i += 1) {
+                track[0][i] = i;
+            }
+            for (let j = 0; j <= str2.length; j += 1) {
+                track[j][0] = j;
+            }
+            for (let j = 1; j <= str2.length; j += 1) {
+                for (let i = 1; i <= str1.length; i += 1) {
+                    const indicator = str1[i - 1] === str2[j - 1] ? 0 : 1;
+                    track[j][i] = Math.min(
+                        track[j][i - 1] + 1,
+                        track[j - 1][i] + 1,
+                        track[j - 1][i - 1] + indicator,
+                    );
+                }
+            }
+            return track[str2.length][str1.length];
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>
