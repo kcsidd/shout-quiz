@@ -463,15 +463,8 @@
         // Sample questions
         const SAMPLE_QUESTIONS = [
             { question: "What is the capital of France?", answer: "Paris" },
-            { question: "How many continents are there?", answer: "Seven" },
             { question: "What color are emeralds?", answer: "Green" },
-            { question: "Who painted the Mona Lisa?", answer: "Leonardo da Vinci" },
-            { question: "What is 12 times 12?", answer: "144" },
             { question: "What planet is known as the Red Planet?", answer: "Mars" },
-            { question: "How many sides does a hexagon have?", answer: "Six" },
-            { question: "What is the largest ocean on Earth?", answer: "Pacific" },
-            { question: "In what year did World War 2 end?", answer: "1945" },
-            { question: "What is the chemical symbol for gold?", answer: "AU" },
         ];
     </script>
 
@@ -648,28 +641,42 @@
                     const last = event.results.length - 1;
                     const transcript = event.results[last][0].transcript.trim().toLowerCase();
                     
+                    console.log('[VOICE] Input:', transcript, '| Final:', event.results[last].isFinal);
+                    
                     // Only process final results that are at least 2 characters long
                     if (event.results[last].isFinal && transcript && transcript.length >= 2) {
+                        console.log('[VOICE] ✅ Processing:', transcript);
                         onResult(transcript);
                     }
                 };
 
                 recognitionRef.current.onerror = (event) => {
+                    console.log('[VOICE] ERROR:', event.error);
                     if (event.error === 'no-speech') {
                         if (isListening) {
                             try {
                                 recognitionRef.current.start();
-                            } catch (e) {}
+                            } catch (e) {
+                                console.log('[VOICE] Failed to restart after no-speech');
+                            }
                         }
                     }
                 };
 
                 recognitionRef.current.onend = () => {
+                    console.log('[VOICE] Ended. isListening:', isListening);
                     if (isListening) {
                         try {
                             recognitionRef.current.start();
-                        } catch (e) {}
+                            console.log('[VOICE] Restarted');
+                        } catch (e) {
+                            console.log('[VOICE] Failed to restart:', e.message);
+                        }
                     }
+                };
+
+                recognitionRef.current.onstart = () => {
+                    console.log('[VOICE] Started');
                 };
 
                 return () => {
@@ -680,14 +687,22 @@
             }, []);
 
             useEffect(() => {
-                if (!recognitionRef.current) return;
+                console.log('[VOICE] isListening changed to:', isListening);
+                if (!recognitionRef.current) {
+                    console.log('[VOICE] No recognition ref available');
+                    return;
+                }
 
                 if (isListening) {
                     try {
                         recognitionRef.current.start();
-                    } catch (e) {}
+                        console.log('[VOICE] Start attempted');
+                    } catch (e) {
+                        console.log('[VOICE] Start failed:', e.message);
+                    }
                 } else {
                     recognitionRef.current.stop();
+                    console.log('[VOICE] Stopped');
                 }
             }, [isListening]);
 
@@ -826,8 +841,8 @@
             const playersList = Object.values(room.players || {});
 
             const handleStart = () => {
-                if (playersList.length < 2) {
-                    alert('Need at least 2 players to start');
+                if (playersList.length < 1) {
+                    alert('Need at least 1 player to start');
                     return;
                 }
                 gameManager.startGame(room.code);
@@ -868,8 +883,8 @@
                                     Start Game
                                 </button>
                                 <div className="info-text" style={{ marginTop: '15px' }}>
-                                    {playersList.length < 2 
-                                        ? 'Waiting for more players...' 
+                                    {playersList.length < 1 
+                                        ? 'Waiting for players...' 
                                         : 'Ready to start! Click above.'}
                                 </div>
                             </>
@@ -936,7 +951,12 @@
             }, [room.currentQuestion, room.startTime, isAnswered]);
 
             const handleVoiceResult = (transcript) => {
-                if (isAnswered) return;
+                console.log('[ANSWER CHECK] Transcript:', transcript, '| isAnswered:', isAnswered);
+                
+                if (isAnswered) {
+                    console.log('[ANSWER CHECK] Already answered, ignoring');
+                    return;
+                }
 
                 const answer = currentQ.answer.toLowerCase();
                 const transcriptWords = transcript.split(' ');
@@ -956,7 +976,10 @@
                 const distance = levenshteinDistance(transcript, answer);
                 const isCorrect = includesAnswer || answerIncludesTranscript || wordMatch || distance <= 2;
 
+                console.log('[ANSWER CHECK] Correct answer:', answer, '| Match:', isCorrect);
+
                 if (isCorrect) {
+                    console.log('[ANSWER CHECK] ✅ CORRECT! Submitting...');
                     gameManager.answerQuestion(room.code, playerName, true);
                 }
             };
