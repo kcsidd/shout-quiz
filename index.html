@@ -561,6 +561,7 @@
                     updates[`answerHistory/${playerKey}/${room.currentQuestion}`] = {
                         question: room.questions[room.currentQuestion].question,
                         correctAnswer: room.questions[room.currentQuestion].answer,
+                        playerAnswer: room.answerHistory?.[playerKey]?.[room.currentQuestion]?.playerAnswer || 'Voice recognized',
                         answeredCorrectly: true,
                         timestamp: Date.now()
                     };
@@ -584,6 +585,17 @@
                             });
                         }, 2000);
                     });
+                });
+            }
+
+            recordVoiceAttempt(roomCode, playerName, questionIndex, transcript) {
+                const roomRef = database.ref('rooms/' + roomCode);
+                const playerKey = this.sanitizeKey(playerName);
+                
+                // Record the voice attempt (even if wrong)
+                return roomRef.child(`answerHistory/${playerKey}/${questionIndex}`).update({
+                    playerAnswer: transcript,
+                    timestamp: Date.now()
                 });
             }
 
@@ -974,31 +986,55 @@
                     return;
                 }
 
+                // Record this voice attempt (even if wrong)
+                gameManager.recordVoiceAttempt(room.code, playerName, room.currentQuestion, transcript);
+
                 const answer = currentQ.answer.toLowerCase();
                 const transcriptWords = transcript.split(' ');
                 
                 // Check if transcript contains the answer
                 const includesAnswer = transcript.includes(answer);
                 
-                // Check if answer contains the transcript
+                // Check if answer contains the transcript (for partial matches)
                 const answerIncludesTranscript = answer.includes(transcript);
                 
-                // Check if any word in transcript matches the answer
+                // Check if any word in transcript matches the answer (more lenient)
                 const wordMatch = transcriptWords.some(word => {
+                    if (word.length < 2) return false; // Ignore very short words
                     const wordDist = levenshteinDistance(word, answer);
-                    return word === answer || wordDist <= 2;
+                    // More lenient: allow up to 3 character differences OR 30% of word length
+                    const threshold = Math.max(3, Math.floor(answer.length * 0.3));
+                    return word === answer || wordDist <= threshold;
+                });
+                
+                // Check for phonetic similarity (sounds like)
+                const soundsLike = transcriptWords.some(word => {
+                    if (word.length < 2) return false;
+                    // Check if first 2-3 characters match (for phonetic similarity)
+                    const prefixLength = Math.min(3, answer.length);
+                    return word.substring(0, prefixLength) === answer.substring(0, prefixLength);
                 });
                 
                 const distance = levenshteinDistance(transcript, answer);
-                const isCorrect = includesAnswer || answerIncludesTranscript || wordMatch || distance <= 2;
+                const fullMatchThreshold = Math.max(3, Math.floor(answer.length * 0.3));
+                
+                const isCorrect = includesAnswer || 
+                                 answerIncludesTranscript || 
+                                 wordMatch || 
+                                 soundsLike ||
+                                 distance <= fullMatchThreshold;
 
-                console.log('[ANSWER] Correct answer:', answer, '| Match:', isCorrect);
+                console.log('[ANSWER] Correct answer:', answer);
+                console.log('[ANSWER] Includes:', includesAnswer, '| Reverse:', answerIncludesTranscript);
+                console.log('[ANSWER] Word match:', wordMatch, '| Sounds like:', soundsLike);
+                console.log('[ANSWER] Distance:', distance, '/ threshold:', fullMatchThreshold);
+                console.log('[ANSWER] Final match:', isCorrect);
 
                 if (isCorrect) {
                     console.log('[ANSWER] ✅ CORRECT! Submitting...');
                     gameManager.answerQuestion(room.code, playerName, true);
                 } else {
-                    console.log('[ANSWER] ❌ Wrong');
+                    console.log('[ANSWER] ❌ Wrong - recorded as:', transcript);
                 }
             }, [currentQ, isAnswered, room.code, playerName]);
 
@@ -1109,11 +1145,15 @@
             const playerAnswers = room.answerHistory?.[playerKey] || {};
             
             // Build answer breakdown for current player
-            const answerBreakdown = room.questions.map((q, idx) => ({
-                question: q.question,
-                correctAnswer: q.answer,
-                playerAnswered: playerAnswers[idx]?.answeredCorrectly || false
-            }));
+            const answerBreakdown = room.questions.map((q, idx) => {
+                const answer = playerAnswers[idx];
+                return {
+                    question: q.question,
+                    correctAnswer: q.answer,
+                    playerAnswer: answer?.playerAnswer || null,
+                    answeredCorrectly: answer?.answeredCorrectly || false
+                };
+            });
 
             return (
                 <div className="container">
@@ -1172,22 +1212,26 @@
                                                 padding: '15px',
                                                 margin: '10px 0',
                                                 borderRadius: '10px',
-                                                borderLeft: `4px solid ${item.playerAnswered ? '#00ff88' : '#ff0066'}`
+                                                borderLeft: `4px solid ${item.answeredCorrectly ? '#00ff88' : item.playerAnswer ? '#ff9900' : '#ff0066'}`
                                             }}
                                         >
                                             <div style={{ fontSize: '0.9rem', color: '#ccc', marginBottom: '5px' }}>
                                                 Q{idx + 1}: {item.question}
                                             </div>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <div style={{ fontSize: '1rem' }}>
-                                                    <strong>Answer:</strong> {item.correctAnswer}
+                                            <div style={{ marginBottom: '8px' }}>
+                                                <strong>Correct Answer:</strong> {item.correctAnswer}
+                                            </div>
+                                            {item.playerAnswer && (
+                                                <div style={{ marginBottom: '8px', color: '#aaa' }}>
+                                                    <strong>You said:</strong> "{item.playerAnswer}"
                                                 </div>
-                                                <div style={{ 
-                                                    fontSize: '1.2rem',
-                                                    color: item.playerAnswered ? '#00ff88' : '#ff0066'
-                                                }}>
-                                                    {item.playerAnswered ? '✓ Correct' : '✗ Missed'}
-                                                </div>
+                                            )}
+                                            <div style={{ 
+                                                fontSize: '1rem',
+                                                fontWeight: 'bold',
+                                                color: item.answeredCorrectly ? '#00ff88' : item.playerAnswer ? '#ff9900' : '#ff0066'
+                                            }}>
+                                                {item.answeredCorrectly ? '✓ Correct!' : item.playerAnswer ? '✗ Wrong Answer' : '✗ No Answer'}
                                             </div>
                                         </div>
                                     ))}
