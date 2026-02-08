@@ -654,7 +654,10 @@
             const recognitionRef = useRef(null);
 
             useEffect(() => {
+                console.log('🔧 Initializing voice recognition...');
+                
                 if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                    console.error('❌ Speech Recognition not supported');
                     return;
                 }
 
@@ -664,6 +667,8 @@
                 recognitionRef.current.interimResults = true;
                 recognitionRef.current.lang = 'en-US';
 
+                console.log('✅ Speech Recognition initialized');
+
                 recognitionRef.current.onresult = (event) => {
                     const last = event.results.length - 1;
                     const transcript = event.results[last][0].transcript.trim().toLowerCase();
@@ -671,45 +676,64 @@
                     console.log('🎤 Voice input:', transcript);
                     console.log('   Is final:', event.results[last].isFinal);
                     
-                    if (event.results[last].isFinal && transcript) {
+                    // Only process final results that are at least 2 characters long
+                    if (event.results[last].isFinal && transcript && transcript.length >= 2) {
                         console.log('   ✅ Processing final transcript');
                         onResult(transcript);
+                    } else if (!event.results[last].isFinal) {
+                        console.log('   ⏸️ Interim result, waiting for final...');
                     }
                 };
 
                 recognitionRef.current.onerror = (event) => {
+                    console.error('🎤 Speech recognition error:', event.error);
                     if (event.error === 'no-speech') {
                         if (isListening) {
                             try {
                                 recognitionRef.current.start();
-                            } catch (e) {}
+                            } catch (e) {
+                                console.error('Failed to restart after no-speech:', e);
+                            }
                         }
                     }
                 };
 
                 recognitionRef.current.onend = () => {
+                    console.log('🎤 Recognition ended, restarting...');
                     if (isListening) {
                         try {
                             recognitionRef.current.start();
-                        } catch (e) {}
+                        } catch (e) {
+                            console.error('Failed to restart recognition:', e);
+                        }
                     }
+                };
+
+                recognitionRef.current.onstart = () => {
+                    console.log('🎤 Recognition started successfully');
                 };
 
                 return () => {
                     if (recognitionRef.current) {
+                        console.log('🛑 Stopping voice recognition');
                         recognitionRef.current.stop();
                     }
                 };
             }, []);
 
             useEffect(() => {
+                console.log('🔄 isListening changed:', isListening);
                 if (!recognitionRef.current) return;
 
                 if (isListening) {
                     try {
+                        console.log('▶️ Starting recognition...');
                         recognitionRef.current.start();
-                    } catch (e) {}
+                    } catch (e) {
+                        console.error('❌ Failed to start recognition:', e);
+                    }
                 } else {
+                    console.log('⏸️ Stopping recognition...');
                     recognitionRef.current.stop();
                 }
             }, [isListening]);
@@ -959,22 +983,38 @@
             }, [room.currentQuestion, room.startTime, isAnswered]);
 
             const handleVoiceResult = (transcript) => {
-                if (isAnswered) return;
+                if (isAnswered) {
+                    console.log('⚠️ Question already answered, ignoring input');
+                    return;
+                }
 
                 console.log('📝 Checking answer...');
                 console.log('   Transcript:', transcript);
                 console.log('   Correct answer:', currentQ.answer);
                 
                 const answer = currentQ.answer.toLowerCase();
+                const transcriptWords = transcript.split(' ');
+                
+                // Check if transcript contains the answer
                 const includesAnswer = transcript.includes(answer);
+                
+                // Check if answer contains the transcript
                 const answerIncludesTranscript = answer.includes(transcript);
+                
+                // Check if any word in transcript matches the answer
+                const wordMatch = transcriptWords.some(word => {
+                    const wordDist = levenshteinDistance(word, answer);
+                    return word === answer || wordDist <= 2;
+                });
+                
                 const distance = levenshteinDistance(transcript, answer);
                 
                 console.log('   Includes check:', includesAnswer);
                 console.log('   Reverse includes:', answerIncludesTranscript);
+                console.log('   Word match:', wordMatch);
                 console.log('   Levenshtein distance:', distance);
                 
-                const isCorrect = includesAnswer || answerIncludesTranscript || distance <= 2;
+                const isCorrect = includesAnswer || answerIncludesTranscript || wordMatch || distance <= 2;
                 
                 console.log('   Is correct?', isCorrect);
 
@@ -1053,6 +1093,16 @@
                                         <div className="mic-status listening-active">
                                             Listening... Shout your answer!
                                         </div>
+                                        <button 
+                                            className="btn" 
+                                            onClick={() => {
+                                                console.log('🧪 TEST BUTTON: Simulating correct answer');
+                                                handleVoiceResult(currentQ.answer.toLowerCase());
+                                            }}
+                                            style={{ marginTop: '20px', padding: '10px 20px', fontSize: '0.9rem' }}
+                                        >
+                                            🧪 TEST: Submit Correct Answer
+                                        </button>
                                     </div>
                                 </>
                             ) : (
