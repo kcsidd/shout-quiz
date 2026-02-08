@@ -542,8 +542,6 @@
             }
 
             answerQuestion(roomCode, playerName, isCorrect) {
-                console.log('🎯 answerQuestion called:', { roomCode, playerName, isCorrect });
-                
                 if (!isCorrect) return Promise.resolve();
 
                 const roomRef = database.ref('rooms/' + roomCode);
@@ -552,45 +550,29 @@
                 return roomRef.once('value').then(snapshot => {
                     const room = snapshot.val();
                     
-                    console.log('📊 Room state:', {
-                        currentQuestion: room.currentQuestion,
-                        lastAnsweredBy: room.lastAnsweredBy,
-                        lastAnswerTime: room.lastAnswerTime
-                    });
-                    
                     // Check if someone already answered this question
                     if (room.lastAnsweredBy && room.lastAnswerTime !== null && room.currentQuestion === room.lastAnswerTime) {
-                        console.log('⚠️ Question already answered, skipping');
                         return;
                     }
 
                     const currentScore = room.players[playerKey]?.score || 0;
                     const newScore = currentScore + 10;
-                    
-                    console.log('💯 Updating score:', { playerKey, currentScore, newScore });
 
                     const updates = {};
                     updates['lastAnsweredBy'] = playerName;
                     updates['lastAnswerTime'] = room.currentQuestion;
                     updates[`players/${playerKey}/score`] = newScore;
 
-                    console.log('📤 Sending updates to Firebase:', updates);
-
                     return roomRef.update(updates).then(() => {
-                        console.log('✅ Firebase updated successfully');
-                        
                         // Move to next question after delay
                         setTimeout(() => {
-                            console.log('⏭️ Moving to next question...');
                             roomRef.once('value').then(snap => {
                                 const currentRoom = snap.val();
                                 const nextQuestion = currentRoom.currentQuestion + 1;
 
                                 if (nextQuestion >= currentRoom.questions.length) {
-                                    console.log('🏁 Game finished!');
                                     roomRef.update({ status: 'finished' });
                                 } else {
-                                    console.log('➡️ Next question:', nextQuestion);
                                     roomRef.update({
                                         currentQuestion: nextQuestion,
                                         lastAnsweredBy: null,
@@ -599,8 +581,6 @@
                                 }
                             });
                         }, 2000);
-                    }).catch(err => {
-                        console.error('❌ Firebase update failed:', err);
                     });
                 });
             }
@@ -654,10 +634,7 @@
             const recognitionRef = useRef(null);
 
             useEffect(() => {
-                console.log('🔧 Initializing voice recognition...');
-                
                 if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                    console.error('❌ Speech Recognition not supported');
                     return;
                 }
 
@@ -667,73 +644,49 @@
                 recognitionRef.current.interimResults = true;
                 recognitionRef.current.lang = 'en-US';
 
-                console.log('✅ Speech Recognition initialized');
-
                 recognitionRef.current.onresult = (event) => {
                     const last = event.results.length - 1;
                     const transcript = event.results[last][0].transcript.trim().toLowerCase();
                     
-                    console.log('🎤 Voice input:', transcript);
-                    console.log('   Is final:', event.results[last].isFinal);
-                    
                     // Only process final results that are at least 2 characters long
                     if (event.results[last].isFinal && transcript && transcript.length >= 2) {
-                        console.log('   ✅ Processing final transcript');
                         onResult(transcript);
-                    } else if (!event.results[last].isFinal) {
-                        console.log('   ⏸️ Interim result, waiting for final...');
                     }
                 };
 
                 recognitionRef.current.onerror = (event) => {
-                    console.error('🎤 Speech recognition error:', event.error);
                     if (event.error === 'no-speech') {
                         if (isListening) {
                             try {
                                 recognitionRef.current.start();
-                            } catch (e) {
-                                console.error('Failed to restart after no-speech:', e);
-                            }
+                            } catch (e) {}
                         }
                     }
                 };
 
                 recognitionRef.current.onend = () => {
-                    console.log('🎤 Recognition ended, restarting...');
                     if (isListening) {
                         try {
                             recognitionRef.current.start();
-                        } catch (e) {
-                            console.error('Failed to restart recognition:', e);
-                        }
+                        } catch (e) {}
                     }
-                };
-
-                recognitionRef.current.onstart = () => {
-                    console.log('🎤 Recognition started successfully');
                 };
 
                 return () => {
                     if (recognitionRef.current) {
-                        console.log('🛑 Stopping voice recognition');
                         recognitionRef.current.stop();
                     }
                 };
             }, []);
 
             useEffect(() => {
-                console.log('🔄 isListening changed:', isListening);
                 if (!recognitionRef.current) return;
 
                 if (isListening) {
                     try {
-                        console.log('▶️ Starting recognition...');
                         recognitionRef.current.start();
-                    } catch (e) {
-                        console.error('❌ Failed to start recognition:', e);
-                    }
+                    } catch (e) {}
                 } else {
-                    console.log('⏸️ Stopping recognition...');
                     recognitionRef.current.stop();
                 }
             }, [isListening]);
@@ -983,15 +936,8 @@
             }, [room.currentQuestion, room.startTime, isAnswered]);
 
             const handleVoiceResult = (transcript) => {
-                if (isAnswered) {
-                    console.log('⚠️ Question already answered, ignoring input');
-                    return;
-                }
+                if (isAnswered) return;
 
-                console.log('📝 Checking answer...');
-                console.log('   Transcript:', transcript);
-                console.log('   Correct answer:', currentQ.answer);
-                
                 const answer = currentQ.answer.toLowerCase();
                 const transcriptWords = transcript.split(' ');
                 
@@ -1008,21 +954,10 @@
                 });
                 
                 const distance = levenshteinDistance(transcript, answer);
-                
-                console.log('   Includes check:', includesAnswer);
-                console.log('   Reverse includes:', answerIncludesTranscript);
-                console.log('   Word match:', wordMatch);
-                console.log('   Levenshtein distance:', distance);
-                
                 const isCorrect = includesAnswer || answerIncludesTranscript || wordMatch || distance <= 2;
-                
-                console.log('   Is correct?', isCorrect);
 
                 if (isCorrect) {
-                    console.log('✅ CORRECT! Submitting answer...');
                     gameManager.answerQuestion(room.code, playerName, true);
-                } else {
-                    console.log('❌ Wrong answer');
                 }
             };
 
@@ -1093,16 +1028,6 @@
                                         <div className="mic-status listening-active">
                                             Listening... Shout your answer!
                                         </div>
-                                        <button 
-                                            className="btn" 
-                                            onClick={() => {
-                                                console.log('🧪 TEST BUTTON: Simulating correct answer');
-                                                handleVoiceResult(currentQ.answer.toLowerCase());
-                                            }}
-                                            style={{ marginTop: '20px', padding: '10px 20px', fontSize: '0.9rem' }}
-                                        >
-                                            🧪 TEST: Submit Correct Answer
-                                        </button>
                                     </div>
                                 </>
                             ) : (
