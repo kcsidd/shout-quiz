@@ -485,6 +485,7 @@
                     questions: questions,
                     lastAnsweredBy: null,
                     lastAnswerTime: null,
+                    answerHistory: {}, // Track which player answered which questions correctly
                     players: {
                         [this.sanitizeKey(hostName)]: {
                             name: hostName,
@@ -555,6 +556,14 @@
                     updates['lastAnsweredBy'] = playerName;
                     updates['lastAnswerTime'] = room.currentQuestion;
                     updates[`players/${playerKey}/score`] = newScore;
+                    
+                    // Record this answer in history
+                    updates[`answerHistory/${playerKey}/${room.currentQuestion}`] = {
+                        question: room.questions[room.currentQuestion].question,
+                        correctAnswer: room.questions[room.currentQuestion].answer,
+                        answeredCorrectly: true,
+                        timestamp: Date.now()
+                    };
 
                     return roomRef.update(updates).then(() => {
                         // Move to next question after delay
@@ -647,29 +656,43 @@
                     const last = event.results.length - 1;
                     const transcript = event.results[last][0].transcript.trim().toLowerCase();
                     
+                    console.log('[VOICE] Input:', transcript, '| Final:', event.results[last].isFinal);
+                    
                     // Only process final results that are at least 2 characters long
                     if (event.results[last].isFinal && transcript && transcript.length >= 2) {
+                        console.log('[VOICE] ✅ Processing:', transcript);
                         // Always call the latest callback
                         onResultRef.current(transcript);
                     }
                 };
 
                 recognitionRef.current.onerror = (event) => {
+                    console.log('[VOICE] ERROR:', event.error);
                     if (event.error === 'no-speech') {
                         if (isListening) {
                             try {
                                 recognitionRef.current.start();
-                            } catch (e) {}
+                            } catch (e) {
+                                console.log('[VOICE] Failed to restart');
+                            }
                         }
                     }
                 };
 
                 recognitionRef.current.onend = () => {
+                    console.log('[VOICE] Ended. isListening:', isListening);
                     if (isListening) {
                         try {
                             recognitionRef.current.start();
-                        } catch (e) {}
+                            console.log('[VOICE] Restarted');
+                        } catch (e) {
+                            console.log('[VOICE] Failed to restart');
+                        }
                     }
+                };
+
+                recognitionRef.current.onstart = () => {
+                    console.log('[VOICE] Started');
                 };
 
                 return () => {
@@ -680,14 +703,22 @@
             }, []);
 
             useEffect(() => {
-                if (!recognitionRef.current) return;
+                console.log('[VOICE] isListening changed to:', isListening);
+                if (!recognitionRef.current) {
+                    console.log('[VOICE] No recognition ref');
+                    return;
+                }
 
                 if (isListening) {
                     try {
                         recognitionRef.current.start();
-                    } catch (e) {}
+                        console.log('[VOICE] Started');
+                    } catch (e) {
+                        console.log('[VOICE] Start failed:', e.message);
+                    }
                 } else {
                     recognitionRef.current.stop();
+                    console.log('[VOICE] Stopped');
                 }
             }, [isListening]);
 
@@ -936,7 +967,12 @@
             }, [room.currentQuestion, room.startTime, isAnswered]);
 
             const handleVoiceResult = useCallback((transcript) => {
-                if (isAnswered) return;
+                console.log('[ANSWER] Transcript:', transcript, '| Question:', currentQ.question);
+                
+                if (isAnswered) {
+                    console.log('[ANSWER] Already answered, ignoring');
+                    return;
+                }
 
                 const answer = currentQ.answer.toLowerCase();
                 const transcriptWords = transcript.split(' ');
@@ -956,8 +992,13 @@
                 const distance = levenshteinDistance(transcript, answer);
                 const isCorrect = includesAnswer || answerIncludesTranscript || wordMatch || distance <= 2;
 
+                console.log('[ANSWER] Correct answer:', answer, '| Match:', isCorrect);
+
                 if (isCorrect) {
+                    console.log('[ANSWER] ✅ CORRECT! Submitting...');
                     gameManager.answerQuestion(room.code, playerName, true);
+                } else {
+                    console.log('[ANSWER] ❌ Wrong');
                 }
             }, [currentQ, isAnswered, room.code, playerName]);
 
@@ -1061,9 +1102,18 @@
         }
 
         // Results Screen
-        function ResultsScreen({ room }) {
+        function ResultsScreen({ room, playerName }) {
             const playersList = Object.values(room.players || {}).sort((a, b) => b.score - a.score);
             const top3 = playersList.slice(0, 3);
+            const playerKey = gameManager.sanitizeKey(playerName);
+            const playerAnswers = room.answerHistory?.[playerKey] || {};
+            
+            // Build answer breakdown for current player
+            const answerBreakdown = room.questions.map((q, idx) => ({
+                question: q.question,
+                correctAnswer: q.answer,
+                playerAnswered: playerAnswers[idx]?.answeredCorrectly || false
+            }));
 
             return (
                 <div className="container">
@@ -1110,6 +1160,39 @@
                                     </ul>
                                 </>
                             )}
+
+                            <div style={{ marginTop: '40px' }}>
+                                <h3 style={{ marginBottom: '20px', textAlign: 'center' }}>Your Answer Breakdown</h3>
+                                <div style={{ textAlign: 'left' }}>
+                                    {answerBreakdown.map((item, idx) => (
+                                        <div 
+                                            key={idx} 
+                                            style={{ 
+                                                background: 'rgba(255, 255, 255, 0.05)',
+                                                padding: '15px',
+                                                margin: '10px 0',
+                                                borderRadius: '10px',
+                                                borderLeft: `4px solid ${item.playerAnswered ? '#00ff88' : '#ff0066'}`
+                                            }}
+                                        >
+                                            <div style={{ fontSize: '0.9rem', color: '#ccc', marginBottom: '5px' }}>
+                                                Q{idx + 1}: {item.question}
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <div style={{ fontSize: '1rem' }}>
+                                                    <strong>Answer:</strong> {item.correctAnswer}
+                                                </div>
+                                                <div style={{ 
+                                                    fontSize: '1.2rem',
+                                                    color: item.playerAnswered ? '#00ff88' : '#ff0066'
+                                                }}>
+                                                    {item.playerAnswered ? '✓ Correct' : '✗ Missed'}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
 
                             <button 
                                 className="btn" 
@@ -1170,7 +1253,7 @@
             }
 
             if (room.status === 'finished') {
-                return <ResultsScreen room={room} />;
+                return <ResultsScreen room={room} playerName={playerName} />;
             }
 
             return null;
