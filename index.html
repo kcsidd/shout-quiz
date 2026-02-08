@@ -469,7 +469,7 @@
     </script>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect, useRef, useCallback } = React;
 
         // Firebase Game Manager
         class FirebaseGameManager {
@@ -950,8 +950,8 @@
                 };
             }, [room.currentQuestion, room.startTime, isAnswered]);
 
-            const handleVoiceResult = (transcript) => {
-                console.log('[ANSWER CHECK] Transcript:', transcript, '| isAnswered:', isAnswered);
+            const handleVoiceResult = useCallback((transcript) => {
+                console.log('[ANSWER CHECK] Transcript:', transcript, '| isAnswered:', isAnswered, '| Question:', currentQ.question);
                 
                 if (isAnswered) {
                     console.log('[ANSWER CHECK] Already answered, ignoring');
@@ -982,7 +982,7 @@
                     console.log('[ANSWER CHECK] ✅ CORRECT! Submitting...');
                     gameManager.answerQuestion(room.code, playerName, true);
                 }
-            };
+            }, [currentQ, isAnswered, room.code, playerName]);
 
             const hasVoiceRecognition = useVoiceRecognition(handleVoiceResult, isListening && !isAnswered);
 
