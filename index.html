@@ -625,6 +625,12 @@
         // Voice Recognition Hook
         function useVoiceRecognition(onResult, isListening) {
             const recognitionRef = useRef(null);
+            const onResultRef = useRef(onResult);
+
+            // Keep the callback ref updated
+            useEffect(() => {
+                onResultRef.current = onResult;
+            }, [onResult]);
 
             useEffect(() => {
                 if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
@@ -646,7 +652,8 @@
                     // Only process final results that are at least 2 characters long
                     if (event.results[last].isFinal && transcript && transcript.length >= 2) {
                         console.log('[VOICE] ✅ Processing:', transcript);
-                        onResult(transcript);
+                        // Always call the latest callback
+                        onResultRef.current(transcript);
                     }
                 };
 
