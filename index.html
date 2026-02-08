@@ -551,7 +551,7 @@
                     const room = snapshot.val();
                     
                     // Check if someone already answered this question
-                    if (room.lastAnsweredBy && room.currentQuestion === (room.lastAnswerTime || 0)) {
+                    if (room.lastAnsweredBy && room.lastAnswerTime !== null && room.currentQuestion === room.lastAnswerTime) {
                         return;
                     }
 
@@ -589,7 +589,7 @@
                     const room = snapshot.val();
                     
                     // Only timeout if no one has answered
-                    if (room.lastAnsweredBy && room.currentQuestion === (room.lastAnswerTime || 0)) {
+                    if (room.lastAnsweredBy && room.lastAnswerTime !== null && room.currentQuestion === room.lastAnswerTime) {
                         return;
                     }
 
