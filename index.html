@@ -641,49 +641,35 @@
                 recognitionRef.current = new SpeechRecognition();
                 recognitionRef.current.continuous = true;
                 recognitionRef.current.interimResults = true;
-                recognitionRef.current.lang = 'en-US';
+                recognitionRef.current.lang = 'en-IN'; // Indian English
 
                 recognitionRef.current.onresult = (event) => {
                     const last = event.results.length - 1;
                     const transcript = event.results[last][0].transcript.trim().toLowerCase();
                     
-                    console.log('[VOICE] Input:', transcript, '| Final:', event.results[last].isFinal);
-                    
                     // Only process final results that are at least 2 characters long
                     if (event.results[last].isFinal && transcript && transcript.length >= 2) {
-                        console.log('[VOICE] ✅ Processing:', transcript);
                         // Always call the latest callback
                         onResultRef.current(transcript);
                     }
                 };
 
                 recognitionRef.current.onerror = (event) => {
-                    console.log('[VOICE] ERROR:', event.error);
                     if (event.error === 'no-speech') {
                         if (isListening) {
                             try {
                                 recognitionRef.current.start();
-                            } catch (e) {
-                                console.log('[VOICE] Failed to restart after no-speech');
-                            }
+                            } catch (e) {}
                         }
                     }
                 };
 
                 recognitionRef.current.onend = () => {
-                    console.log('[VOICE] Ended. isListening:', isListening);
                     if (isListening) {
                         try {
                             recognitionRef.current.start();
-                            console.log('[VOICE] Restarted');
-                        } catch (e) {
-                            console.log('[VOICE] Failed to restart:', e.message);
-                        }
+                        } catch (e) {}
                     }
-                };
-
-                recognitionRef.current.onstart = () => {
-                    console.log('[VOICE] Started');
                 };
 
                 return () => {
@@ -694,22 +680,14 @@
             }, []);
 
             useEffect(() => {
-                console.log('[VOICE] isListening changed to:', isListening);
-                if (!recognitionRef.current) {
-                    console.log('[VOICE] No recognition ref available');
-                    return;
-                }
+                if (!recognitionRef.current) return;
 
                 if (isListening) {
                     try {
                         recognitionRef.current.start();
-                        console.log('[VOICE] Start attempted');
-                    } catch (e) {
-                        console.log('[VOICE] Start failed:', e.message);
-                    }
+                    } catch (e) {}
                 } else {
                     recognitionRef.current.stop();
-                    console.log('[VOICE] Stopped');
                 }
             }, [isListening]);
 
@@ -958,12 +936,7 @@
             }, [room.currentQuestion, room.startTime, isAnswered]);
 
             const handleVoiceResult = useCallback((transcript) => {
-                console.log('[ANSWER CHECK] Transcript:', transcript, '| isAnswered:', isAnswered, '| Question:', currentQ.question);
-                
-                if (isAnswered) {
-                    console.log('[ANSWER CHECK] Already answered, ignoring');
-                    return;
-                }
+                if (isAnswered) return;
 
                 const answer = currentQ.answer.toLowerCase();
                 const transcriptWords = transcript.split(' ');
@@ -983,10 +956,7 @@
                 const distance = levenshteinDistance(transcript, answer);
                 const isCorrect = includesAnswer || answerIncludesTranscript || wordMatch || distance <= 2;
 
-                console.log('[ANSWER CHECK] Correct answer:', answer, '| Match:', isCorrect);
-
                 if (isCorrect) {
-                    console.log('[ANSWER CHECK] ✅ CORRECT! Submitting...');
                     gameManager.answerQuestion(room.code, playerName, true);
                 }
             }, [currentQ, isAnswered, room.code, playerName]);
