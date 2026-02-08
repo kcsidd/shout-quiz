@@ -610,16 +610,32 @@
                         return;
                     }
 
+                    // Mark this question as unanswered for all players who didn't answer
+                    const updates = {};
                     const nextQuestion = room.currentQuestion + 1;
 
+                    // Record timeout in answer history for players who didn't answer
+                    Object.keys(room.players || {}).forEach(playerKey => {
+                        const playerAnswered = room.answerHistory?.[playerKey]?.[room.currentQuestion];
+                        if (!playerAnswered || !playerAnswered.answeredCorrectly) {
+                            updates[`answerHistory/${playerKey}/${room.currentQuestion}`] = {
+                                question: room.questions[room.currentQuestion].question,
+                                correctAnswer: room.questions[room.currentQuestion].answer,
+                                playerAnswer: playerAnswered?.playerAnswer || null,
+                                answeredCorrectly: false,
+                                timestamp: Date.now()
+                            };
+                        }
+                    });
+
                     if (nextQuestion >= room.questions.length) {
-                        return roomRef.update({ status: 'finished' });
+                        updates['status'] = 'finished';
+                        return roomRef.update(updates);
                     } else {
-                        return roomRef.update({
-                            currentQuestion: nextQuestion,
-                            lastAnsweredBy: null,
-                            startTime: Date.now()
-                        });
+                        updates['currentQuestion'] = nextQuestion;
+                        updates['lastAnsweredBy'] = null;
+                        updates['startTime'] = Date.now();
+                        return roomRef.update(updates);
                     }
                 });
             }
@@ -933,6 +949,7 @@
             const [timeLeft, setTimeLeft] = useState(5);
             const [isListening, setIsListening] = useState(false);
             const [micPermission, setMicPermission] = useState(null);
+            const [isTransitioning, setIsTransitioning] = useState(false);
             const timerRef = useRef(null);
             const currentQ = room.questions[room.currentQuestion];
             const isAnswered = room.lastAnsweredBy && room.lastAnswerTime === room.currentQuestion;
@@ -951,11 +968,19 @@
             useEffect(() => {
                 if (isAnswered) {
                     setTimeLeft(5);
+                    setIsListening(false);
+                    setIsTransitioning(true); // Show loading between questions
                     if (timerRef.current) {
                         clearInterval(timerRef.current);
                     }
                     return;
                 }
+
+                // Reset transitioning and restart voice after delay
+                const transitionDelay = setTimeout(() => {
+                    setIsTransitioning(false);
+                    setIsListening(true);
+                }, 500); // 500ms to restart voice before showing question
 
                 setTimeLeft(5);
                 const startTime = room.startTime || Date.now();
@@ -972,6 +997,7 @@
                 }, 100);
 
                 return () => {
+                    clearTimeout(transitionDelay);
                     if (timerRef.current) {
                         clearInterval(timerRef.current);
                     }
@@ -1078,6 +1104,20 @@
 
             const playersList = Object.values(room.players || {});
 
+            // Show transition screen while voice recognition restarts
+            if (isTransitioning) {
+                return (
+                    <div className="container">
+                        <div className="card">
+                            <div className="loading">
+                                <div className="loading-spinner"></div>
+                                <p>Next question...</p>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
             return (
                 <div className="container">
                     <div className="card">
@@ -1108,12 +1148,31 @@
                                     </div>
                                 </>
                             ) : (
-                                <div className="correct-answer">
-                                    <div className="correct-answer-text">
-                                        ✓ {currentQ.answer}
+                                <div 
+                                    className="correct-answer"
+                                    style={{
+                                        background: room.lastAnsweredBy && room.lastAnsweredBy === playerName 
+                                            ? 'rgba(0, 255, 136, 0.1)' 
+                                            : 'rgba(255, 0, 102, 0.1)',
+                                        borderColor: room.lastAnsweredBy && room.lastAnsweredBy === playerName 
+                                            ? '#00ff88' 
+                                            : '#ff0066'
+                                    }}
+                                >
+                                    <div 
+                                        className="correct-answer-text"
+                                        style={{
+                                            color: room.lastAnsweredBy && room.lastAnsweredBy === playerName 
+                                                ? '#00ff88' 
+                                                : '#ff0066'
+                                        }}
+                                    >
+                                        {room.lastAnsweredBy && room.lastAnsweredBy === playerName ? '✓' : '✗'} {currentQ.answer}
                                     </div>
                                     <div className="winner-name">
-                                        {room.lastAnsweredBy} got it! 🎉
+                                        {room.lastAnsweredBy 
+                                            ? `${room.lastAnsweredBy} got it! 🎉` 
+                                            : 'Time\'s up! No one answered.'}
                                     </div>
                                 </div>
                             )}
