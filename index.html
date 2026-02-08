@@ -542,6 +542,8 @@
             }
 
             answerQuestion(roomCode, playerName, isCorrect) {
+                console.log('🎯 answerQuestion called:', { roomCode, playerName, isCorrect });
+                
                 if (!isCorrect) return Promise.resolve();
 
                 const roomRef = database.ref('rooms/' + roomCode);
@@ -550,26 +552,45 @@
                 return roomRef.once('value').then(snapshot => {
                     const room = snapshot.val();
                     
+                    console.log('📊 Room state:', {
+                        currentQuestion: room.currentQuestion,
+                        lastAnsweredBy: room.lastAnsweredBy,
+                        lastAnswerTime: room.lastAnswerTime
+                    });
+                    
                     // Check if someone already answered this question
                     if (room.lastAnsweredBy && room.lastAnswerTime !== null && room.currentQuestion === room.lastAnswerTime) {
+                        console.log('⚠️ Question already answered, skipping');
                         return;
                     }
+
+                    const currentScore = room.players[playerKey]?.score || 0;
+                    const newScore = currentScore + 10;
+                    
+                    console.log('💯 Updating score:', { playerKey, currentScore, newScore });
 
                     const updates = {};
                     updates['lastAnsweredBy'] = playerName;
                     updates['lastAnswerTime'] = room.currentQuestion;
-                    updates[`players/${playerKey}/score`] = (room.players[playerKey].score || 0) + 10;
+                    updates[`players/${playerKey}/score`] = newScore;
+
+                    console.log('📤 Sending updates to Firebase:', updates);
 
                     return roomRef.update(updates).then(() => {
+                        console.log('✅ Firebase updated successfully');
+                        
                         // Move to next question after delay
                         setTimeout(() => {
+                            console.log('⏭️ Moving to next question...');
                             roomRef.once('value').then(snap => {
                                 const currentRoom = snap.val();
                                 const nextQuestion = currentRoom.currentQuestion + 1;
 
                                 if (nextQuestion >= currentRoom.questions.length) {
+                                    console.log('🏁 Game finished!');
                                     roomRef.update({ status: 'finished' });
                                 } else {
+                                    console.log('➡️ Next question:', nextQuestion);
                                     roomRef.update({
                                         currentQuestion: nextQuestion,
                                         lastAnsweredBy: null,
@@ -578,6 +599,8 @@
                                 }
                             });
                         }, 2000);
+                    }).catch(err => {
+                        console.error('❌ Firebase update failed:', err);
                     });
                 });
             }
@@ -645,7 +668,11 @@
                     const last = event.results.length - 1;
                     const transcript = event.results[last][0].transcript.trim().toLowerCase();
                     
+                    console.log('🎤 Voice input:', transcript);
+                    console.log('   Is final:', event.results[last].isFinal);
+                    
                     if (event.results[last].isFinal && transcript) {
+                        console.log('   ✅ Processing final transcript');
                         onResult(transcript);
                     }
                 };
@@ -934,13 +961,28 @@
             const handleVoiceResult = (transcript) => {
                 if (isAnswered) return;
 
+                console.log('📝 Checking answer...');
+                console.log('   Transcript:', transcript);
+                console.log('   Correct answer:', currentQ.answer);
+                
                 const answer = currentQ.answer.toLowerCase();
-                const isCorrect = transcript.includes(answer) || 
-                                 answer.includes(transcript) ||
-                                 levenshteinDistance(transcript, answer) <= 2;
+                const includesAnswer = transcript.includes(answer);
+                const answerIncludesTranscript = answer.includes(transcript);
+                const distance = levenshteinDistance(transcript, answer);
+                
+                console.log('   Includes check:', includesAnswer);
+                console.log('   Reverse includes:', answerIncludesTranscript);
+                console.log('   Levenshtein distance:', distance);
+                
+                const isCorrect = includesAnswer || answerIncludesTranscript || distance <= 2;
+                
+                console.log('   Is correct?', isCorrect);
 
                 if (isCorrect) {
+                    console.log('✅ CORRECT! Submitting answer...');
                     gameManager.answerQuestion(room.code, playerName, true);
+                } else {
+                    console.log('❌ Wrong answer');
                 }
             };
 
