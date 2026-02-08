@@ -967,7 +967,7 @@
 
             useEffect(() => {
                 if (isAnswered) {
-                    setTimeLeft(5);
+                    setTimeLeft(8);
                     setIsListening(false);
                     setIsTransitioning(true); // Show loading between questions
                     if (timerRef.current) {
@@ -982,12 +982,12 @@
                     setIsListening(true);
                 }, 500); // 500ms to restart voice before showing question
 
-                setTimeLeft(5);
+                setTimeLeft(8);
                 const startTime = room.startTime || Date.now();
                 
                 timerRef.current = setInterval(() => {
                     const elapsed = Math.floor((Date.now() - startTime) / 1000);
-                    const remaining = Math.max(0, 5 - elapsed);
+                    const remaining = Math.max(0, 8 - elapsed);
                     setTimeLeft(remaining);
 
                     if (remaining === 0) {
@@ -1134,16 +1134,21 @@
                                         <div className="timer-circle">
                                             <div 
                                                 className="timer-fill" 
-                                                style={{ height: `${(timeLeft / 5) * 100}%` }}
+                                                style={{ height: `${(timeLeft / 8) * 100}%` }}
                                             ></div>
                                             <span className="timer-number">{timeLeft}</span>
                                         </div>
                                     </div>
 
                                     <div className="mic-indicator">
-                                        <div className="mic-icon">🎤</div>
-                                        <div className="mic-status listening-active">
-                                            Listening... Shout your answer!
+                                        <div className="mic-icon" style={{ 
+                                            animation: isListening ? 'micPulse 1.5s ease-in-out infinite' : 'none',
+                                            opacity: isListening ? 1 : 0.3
+                                        }}>🎤</div>
+                                        <div className="mic-status listening-active" style={{
+                                            color: isListening ? 'var(--neon-cyan)' : '#666'
+                                        }}>
+                                            {isListening ? 'Listening... Shout your answer!' : 'Preparing...'}
                                         </div>
                                     </div>
                                 </>
