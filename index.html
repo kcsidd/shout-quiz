@@ -535,7 +535,7 @@
                 });
             }
 
-            answerQuestion(roomCode, playerName, isCorrect) {
+            answerQuestion(roomCode, playerName, isCorrect, transcript) {
                 if (!isCorrect) return Promise.resolve();
 
                 const roomRef = database.ref('rooms/' + roomCode);
@@ -557,14 +557,9 @@
                     updates['lastAnswerTime'] = room.currentQuestion;
                     updates[`players/${playerKey}/score`] = newScore;
                     
-                    // Record this answer in history
-                    updates[`answerHistory/${playerKey}/${room.currentQuestion}`] = {
-                        question: room.questions[room.currentQuestion].question,
-                        correctAnswer: room.questions[room.currentQuestion].answer,
-                        playerAnswer: room.answerHistory?.[playerKey]?.[room.currentQuestion]?.playerAnswer || 'Voice recognized',
-                        answeredCorrectly: true,
-                        timestamp: Date.now()
-                    };
+                    // Update the existing answer record to mark as correct
+                    updates[`answerHistory/${playerKey}/${room.currentQuestion}/answeredCorrectly`] = true;
+                    updates[`answerHistory/${playerKey}/${room.currentQuestion}/timestamp`] = Date.now();
 
                     return roomRef.update(updates).then(() => {
                         // Move to next question after delay
@@ -592,10 +587,17 @@
                 const roomRef = database.ref('rooms/' + roomCode);
                 const playerKey = this.sanitizeKey(playerName);
                 
-                // Record the voice attempt (even if wrong)
-                return roomRef.child(`answerHistory/${playerKey}/${questionIndex}`).update({
-                    playerAnswer: transcript,
-                    timestamp: Date.now()
+                return roomRef.once('value').then(snapshot => {
+                    const room = snapshot.val();
+                    
+                    // Record the voice attempt with full question data
+                    return roomRef.child(`answerHistory/${playerKey}/${questionIndex}`).set({
+                        question: room.questions[questionIndex].question,
+                        correctAnswer: room.questions[questionIndex].answer,
+                        playerAnswer: transcript,
+                        answeredCorrectly: false, // Will be updated to true if correct
+                        timestamp: Date.now()
+                    });
                 });
             }
 
@@ -1012,57 +1014,57 @@
                     return;
                 }
 
-                // Record this voice attempt (even if wrong)
-                gameManager.recordVoiceAttempt(room.code, playerName, room.currentQuestion, transcript);
+                // Record this voice attempt first (even if wrong)
+                gameManager.recordVoiceAttempt(room.code, playerName, room.currentQuestion, transcript).then(() => {
+                    const answer = currentQ.answer.toLowerCase();
+                    const transcriptWords = transcript.split(' ');
+                    
+                    // Check if transcript contains the answer
+                    const includesAnswer = transcript.includes(answer);
+                    
+                    // Check if answer contains the transcript (for partial matches)
+                    const answerIncludesTranscript = answer.includes(transcript);
+                    
+                    // Check if any word in transcript matches the answer (more lenient)
+                    const wordMatch = transcriptWords.some(word => {
+                        if (word.length < 2) return false; // Ignore very short words
+                        const wordDist = levenshteinDistance(word, answer);
+                        // More lenient: allow up to 3 character differences OR 30% of word length
+                        const threshold = Math.max(3, Math.floor(answer.length * 0.3));
+                        return word === answer || wordDist <= threshold;
+                    });
+                    
+                    // Check for phonetic similarity (sounds like)
+                    const soundsLike = transcriptWords.some(word => {
+                        if (word.length < 2) return false;
+                        // Check if first 2-3 characters match (for phonetic similarity)
+                        const prefixLength = Math.min(3, answer.length);
+                        return word.substring(0, prefixLength) === answer.substring(0, prefixLength);
+                    });
+                    
+                    const distance = levenshteinDistance(transcript, answer);
+                    const fullMatchThreshold = Math.max(3, Math.floor(answer.length * 0.3));
+                    
+                    const isCorrect = includesAnswer || 
+                                     answerIncludesTranscript || 
+                                     wordMatch || 
+                                     soundsLike ||
+                                     distance <= fullMatchThreshold;
 
-                const answer = currentQ.answer.toLowerCase();
-                const transcriptWords = transcript.split(' ');
-                
-                // Check if transcript contains the answer
-                const includesAnswer = transcript.includes(answer);
-                
-                // Check if answer contains the transcript (for partial matches)
-                const answerIncludesTranscript = answer.includes(transcript);
-                
-                // Check if any word in transcript matches the answer (more lenient)
-                const wordMatch = transcriptWords.some(word => {
-                    if (word.length < 2) return false; // Ignore very short words
-                    const wordDist = levenshteinDistance(word, answer);
-                    // More lenient: allow up to 3 character differences OR 30% of word length
-                    const threshold = Math.max(3, Math.floor(answer.length * 0.3));
-                    return word === answer || wordDist <= threshold;
+                    console.log('[ANSWER] Correct answer:', answer);
+                    console.log('[ANSWER] Includes:', includesAnswer, '| Reverse:', answerIncludesTranscript);
+                    console.log('[ANSWER] Word match:', wordMatch, '| Sounds like:', soundsLike);
+                    console.log('[ANSWER] Distance:', distance, '/ threshold:', fullMatchThreshold);
+                    console.log('[ANSWER] Final match:', isCorrect);
+
+                    if (isCorrect) {
+                        console.log('[ANSWER] ✅ CORRECT! Submitting...');
+                        gameManager.answerQuestion(room.code, playerName, true, transcript);
+                    } else {
+                        console.log('[ANSWER] ❌ Wrong - recorded as:', transcript);
+                    }
                 });
-                
-                // Check for phonetic similarity (sounds like)
-                const soundsLike = transcriptWords.some(word => {
-                    if (word.length < 2) return false;
-                    // Check if first 2-3 characters match (for phonetic similarity)
-                    const prefixLength = Math.min(3, answer.length);
-                    return word.substring(0, prefixLength) === answer.substring(0, prefixLength);
-                });
-                
-                const distance = levenshteinDistance(transcript, answer);
-                const fullMatchThreshold = Math.max(3, Math.floor(answer.length * 0.3));
-                
-                const isCorrect = includesAnswer || 
-                                 answerIncludesTranscript || 
-                                 wordMatch || 
-                                 soundsLike ||
-                                 distance <= fullMatchThreshold;
-
-                console.log('[ANSWER] Correct answer:', answer);
-                console.log('[ANSWER] Includes:', includesAnswer, '| Reverse:', answerIncludesTranscript);
-                console.log('[ANSWER] Word match:', wordMatch, '| Sounds like:', soundsLike);
-                console.log('[ANSWER] Distance:', distance, '/ threshold:', fullMatchThreshold);
-                console.log('[ANSWER] Final match:', isCorrect);
-
-                if (isCorrect) {
-                    console.log('[ANSWER] ✅ CORRECT! Submitting...');
-                    gameManager.answerQuestion(room.code, playerName, true);
-                } else {
-                    console.log('[ANSWER] ❌ Wrong - recorded as:', transcript);
-                }
-            }, [currentQ, isAnswered, room.code, playerName]);
+            }, [currentQ, isAnswered, room.code, room.currentQuestion, playerName]);
 
             const hasVoiceRecognition = useVoiceRecognition(handleVoiceResult, isListening && !isAnswered);
 
